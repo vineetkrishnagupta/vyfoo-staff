@@ -1,0 +1,24 @@
+.App {
+  height: 100vh;
+  overflow: hidden;
+}
+
+.selected-table {
+  border: 2px solid #007bff !important;
+  box-shadow: 0 0 0 2px #007bff33;
+  background: #eaf4ff !important;
+}
+
+.sidebar-category-card {
+  box-sizing: border-box;
+  overflow: hidden;
+} 
+
+.tab-container {
+  height: 40px; 
+}
+
+.tab {
+  padding: 4px 16px; 
+  font-size: 16px;    
+}

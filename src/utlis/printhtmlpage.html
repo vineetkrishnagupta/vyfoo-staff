@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Remote Thermal Printer Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+        }
+        .section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .section h3 {
+            color: #34495e;
+            margin-top: 0;
+        }
+        button {
+            background: #3498db;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #2980b9;
+        }
+        .kot { background: #e74c3c; }
+        .kot:hover { background: #c0392b; }
+        textarea {
+            width: 100%;
+            height: 200px;
+            font-family: monospace;
+            font-size: 12px;
+            margin: 10px 0;
+        }
+        .result {
+            background: #ecf0f1;
+            padding: 10px;
+            border-radius: 5px;
+            margin-top: 10px;
+            white-space: pre-wrap;
+            font-family: monospace;
+        }
+        .success { background: #d5f4e6; }
+        .error { background: #fadbd8; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🖨️ Remote Thermal Printer Test</h1>
+        <p><strong>Instructions:</strong> Make sure your Electron Thermal Printer app is running and you have selected KOT and BILL printers.</p>
+        
+        <div class="section">
+            <h3>📊 Server Status</h3>
+            <button onclick="checkStatus()">Check Server Status</button>
+            <div id="statusResult" class="result" style="display: none;"></div>
+        </div>
+
+        <div class="section">
+            <h3>🍽️ Send KOT (Kitchen Order Ticket)</h3>
+            <button class="kot" onclick="sendKOTReceipt()">Send KOT to Kitchen</button>
+            <button onclick="sendCustomKOT()">Send Custom KOT</button>
+            <div id="kotResult" class="result" style="display: none;"></div>
+        </div>
+
+        <div class="section">
+            <h3>🧾 Send BILL (Customer Receipt)</h3>
+            <button onclick="sendBillReceipt()">Send Bill to Customer</button>
+            <button onclick="sendCustomBill()">Send Custom Bill</button>
+            <div id="billResult" class="result" style="display: none;"></div>
+        </div>
+
+        <div class="section">
+            <h3>⚙️ Custom ESC/POS Commands</h3>
+            <p>Enter raw ESC/POS commands (will be sent as string):</p>
+            <textarea id="customCommands" placeholder="ESC @
+ESC ! 0x08
+ESC a 0x01
+    CUSTOM RECEIPT
+ESC ! 0x00
+ESC a 0x00
+Date: 2024-12-25
+Time: 14:30:00
+
+Custom item 1      $5.00
+Custom item 2      $3.50
+
+Total:             $8.50
+
+Thank you!
+ESC d 3
+GS V 0x41 0x03"></textarea>
+            <div>
+                <button onclick="sendCustomToPrinter('kot')">Send to KOT Printer</button>
+                <button onclick="sendCustomToPrinter('bill')">Send to BILL Printer</button>
+            </div>
+            <div id="customResult" class="result" style="display: none;"></div>
+        </div>
+    </div>
+
+    <script>
+        const SERVER_URL = 'http://localhost:3111';
+
+        async function checkStatus() {
+            try {
+                const response = await fetch(`${SERVER_URL}/status`);
+                const data = await response.json();
+                
+                showResult('statusResult', `Server Status: ${data.status}
+Timestamp: ${data.timestamp}
+KOT Printer: ${data.printers.kot}
+BILL Printer: ${data.printers.bill}`, 'success');
+                
+            } catch (error) {
+                showResult('statusResult', `Error: ${error.message}
+Make sure the Electron app is running!`, 'error');
+            }
+        }
+
+        async function sendKOTReceipt() {
+            const kotData = `ESC @
+ESC ! 0x08
+ESC a 0x01
+🍽️ KITCHEN ORDER TICKET
+ESC ! 0x00
+ESC a 0x00
+Order: ${generateOrderNumber()}
+Time: ${new Date().toLocaleTimeString()}
+Table: 5
+
+ESC ! 0x08
+ITEMS TO PREPARE:
+ESC ! 0x00
+================================
+2x Chicken Curry
+1x Naan Bread
+1x Rice
+2x Lassi
+================================
+
+ESC ! 0x08
+⏰ PRIORITY ORDER
+ESC ! 0x00
+Prep Time: ${new Date(Date.now() + 15*60000).toLocaleTimeString()}
+
+ESC d 5
+GS V 0x41 0x03`;
+
+            await sendToPrinter('kot', kotData, 'kotResult');
+        }
+
+        async function sendBillReceipt() {
+            const billData = `ESC @
+ESC ! 0x08
+ESC a 0x01
+    MY RESTAURANT
+ESC ! 0x00
+ESC a 0x00
+================================
+Date: ${new Date().toLocaleDateString()}
+Time: ${new Date().toLocaleTimeString()}
+Order: ${generateOrderNumber()}
+
+Chicken Curry    2x  $12.50
+Naan Bread       1x   $3.00
+Rice             1x   $2.50
+Lassi            2x   $6.00
+
+--------------------------------
+ESC ! 0x08
+ESC a 0x02
+TOTAL:           $24.00
+ESC ! 0x00
+ESC a 0x00
+--------------------------------
+
+ESC a 0x01
+Thank you for dining with us!
+Visit us again soon!
+ESC a 0x00
+
+ESC d 3
+GS V 0x41 0x03`;
+
+            await sendToPrinter('bill', billData, 'billResult');
+        }
+
+        async function sendCustomKOT() {
+            const kotData = `ESC @
+ESC ! 0x08
+🍽️ CUSTOM KOT TEST
+ESC ! 0x00
+Time: ${new Date().toLocaleString()}
+
+This is a custom KOT from browser!
+Order: WEB-${Math.floor(Math.random() * 1000)}
+
+ESC d 3
+GS V 0x41 0x03`;
+
+            await sendToPrinter('kot', kotData, 'kotResult');
+        }
+
+        async function sendCustomBill() {
+            const billData = `ESC @
+ESC ! 0x08
+ESC a 0x01
+CUSTOM BILL TEST
+ESC ! 0x00
+ESC a 0x00
+Time: ${new Date().toLocaleString()}
+
+This is a custom bill from browser!
+Web Order: ${Math.floor(Math.random() * 1000)}
+
+Total: $15.99
+
+Thank you!
+ESC d 3
+GS V 0x41 0x03`;
+
+            await sendToPrinter('bill', billData, 'billResult');
+        }
+
+        async function sendCustomToPrinter(printerType) {
+            const commands = document.getElementById('customCommands').value;
+            if (!commands.trim()) {
+                showResult('customResult', 'Please enter some commands first!', 'error');
+                return;
+            }
+
+            await sendToPrinter(printerType, commands, 'customResult');
+        }
+
+        async function sendToPrinter(printerType, data, resultElementId) {
+            try {
+                showResult(resultElementId, 'Sending to printer...', '');
+                
+                const response = await fetch(`${SERVER_URL}/print`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        printerType: printerType,
+                        data: data  // Send as string, server will handle conversion
+                    })
+                });
+
+                const result = await response.text();
+                
+                if (response.ok) {
+                    showResult(resultElementId, `✅ ${result}`, 'success');
+                } else {
+                    showResult(resultElementId, `❌ ${result}`, 'error');
+                }
+                
+            } catch (error) {
+                showResult(resultElementId, `❌ Network Error: ${error.message}
+Make sure the Electron app is running!`, 'error');
+            }
+        }
+
+        function showResult(elementId, message, type) {
+            const element = document.getElementById(elementId);
+            element.textContent = message;
+            element.className = `result ${type}`;
+            element.style.display = 'block';
+        }
+
+        function generateOrderNumber() {
+            return 'ORD-' + Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+        }
+
+        // Check status on load
+        setTimeout(checkStatus, 1000);
+    </script>
+</body>
+</html> 
