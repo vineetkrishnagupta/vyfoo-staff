@@ -1,5 +1,5 @@
 const config = {
-  "IMAGE_PATH": "https://images.scanka.com",
+  "IMAGE_PATH": "https://images.shunyape.com",
   "TOKEN_KEY": "khateraho",
   "PROTOCOL": "http",
   "HOST": "localhost",
@@ -11,16 +11,16 @@ const config = {
   "qordernumber": 101,
   "currency_symbol": "₹",
   "kotnumber": 1,
-  "IMAGE_PATH_SERVER_ROOT": "/home/scanka/images.scanka.com",
-  "NO_IMAGE_PATH": "https://images.scanka.com/img/noimage.png",
+  "IMAGE_PATH_SERVER_ROOT": "/home/shunyape/images.shunyape.com",
+  "NO_IMAGE_PATH": "https://images.shunyape.com/img/noimage.png",
   "USER_EMAIL": "support@khateraho.com",
   "USER_EMAIL_PASS": "Agra2025!",
-  "qrcode_base_url": "https://scanka.com",
+  "qrcode_base_url": "https://shunyape.com",
   "encrypt_method": "aes-256-cbc",
   "secret_key": "iwcn",
   "secret_iv": "7895215780",
-  "reset_link": "https://fooders.scanka.com/reset_password",
-  "image_directory": "images.scanka.com",
+  "reset_link": "https://fooders.shunyape.com/reset_password",
+  "image_directory": "images.shunyape.com",
   "mp": "Batman2024!",
   "max_area_coverage": 20,
   "invoice_number_prefix": "Bill No.",
@@ -37,7 +37,7 @@ const config = {
   "kds_price":2999,
   "email_whatsapp_massageing_campen_URL": "https://hook.us2.make.com/3mvybcaxtxcvqczsyvhdm9e6vs9k6wwl",
   "alertifyenvironment": "devnode_",
-  "lastorderid": 10630,
+  "lastorderid": 10819,
 };
 
 module.exports = config;

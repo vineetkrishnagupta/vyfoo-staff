@@ -99,7 +99,7 @@ const login = async (req, res, next) => {
       .cookie('token', token, options)
       .json({
         success: true,
-        message: 'Login successful',
+        message: 'Login successfully',
         data: {
           staff: {
             id: staff.id,

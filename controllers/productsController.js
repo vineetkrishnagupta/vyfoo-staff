@@ -2,6 +2,7 @@ const pool = require('../config/db');
 const config = require('../config/config');
 const crypto = require("crypto");
 
+ 
 
 function encrypt_decrypt(action, string) {
   const encrypt_method = config.encrypt_method;
@@ -722,6 +723,8 @@ WHERE f.fooder_id = ?`, [fooder_id]),
 // sent foreigner table also
 
 // send table with type 0 and 2
+
+
 exports.getRealtimeTableData = async (req, res) => {
   try {
     const fooder_id = req.staff.fooder_id;
@@ -752,82 +755,7 @@ exports.getRealtimeTableData = async (req, res) => {
     let kotCommittedMap = {};
     let qrCommittedMap = {};
 
-    // if (tableIds.length > 0) {
-    //   const [[kotRows], [qrRows]] = await Promise.all([
-    //     pool.query(`
-    //       SELECT fk.table_id, COUNT(*) as cnt
-    //       FROM fooders_kot fk
-    //       WHERE fk.fooder_id = ?
-    //         AND fk.table_id IN (?)
-    //         AND fk.status NOT IN (4, 5)
-    //         AND fk.is_deleted = 0
-    //         AND fk.id NOT IN (
-    //           SELECT oi.product_kot_id FROM order_items oi
-    //         )
-    //       GROUP BY fk.table_id;
-    //     `, [fooder_id, tableIds]),
-    //     pool.query(`
-    //       SELECT table_id, COUNT(*) as committed
-    //       FROM orders
-    //       WHERE table_id IN (?)
-    //         AND order_mode IN (0)
-    //         AND payment_status = 0
-    //         AND status != 4
-    //         AND is_cancelled = 0
-    //         AND order_type = 'dine_in'
-    //         AND id > 7100
-    //         AND fooder_id = ?
-    //       GROUP BY table_id;
-    //     `, [tableIds, fooder_id])
-    //   ]);
 
-    //   kotRows.forEach(row => {
-    //     kotCommittedMap[row.table_id] = row.cnt > 0 ? 1 : 0;
-    //   });
-    //   qrRows.forEach(row => {
-    //     qrCommittedMap[row.table_id] = row.committed > 0 ? 1 : 0;
-    //   });
-    // }
-
-    //     if (tableIds.length > 0) {
-    //   const [[kotRows], [qrRows]] = await Promise.all([
-    //     pool.query(`
-    //       SELECT fk.table_id, COUNT(*) as cnt
-    //       FROM fooders_kot fk
-    //       WHERE fk.fooder_id = ?
-    //         AND fk.table_id IN (?)
-    //         AND fk.status NOT IN (4, 5)
-    //         AND fk.is_deleted = 0
-    //         AND fk.id NOT IN (
-    //           SELECT oi.product_kot_id FROM order_items oi
-    //         )
-    //       GROUP BY fk.table_id;
-    //     `, [fooder_id, tableIds]),
-
-    //     pool.query(`
-    //       SELECT o.table_id, o.order_mode, o.status
-    //       FROM orders o
-    //       INNER JOIN (
-    //         SELECT table_id, MAX(id) as max_id
-    //         FROM orders
-    //         WHERE fooder_id = ?
-    //           AND table_id IN (?)
-    //         GROUP BY table_id
-    //       ) latest_order ON o.id = latest_order.max_id
-    //       WHERE o.fooder_id = ?
-    //     `, [fooder_id, tableIds, fooder_id])
-    //   ]);
-
-    //   // KOT map
-    //   kotRows.forEach(row => {
-    //     kotCommittedMap[row.table_id] = row.cnt > 0 ? 1 : 0;
-    //   });
-
-    //   // QR map — only if latest order has order_mode = 0 and status = 0
-    //   qrRows.forEach(row => {
-    //     qrCommittedMap[row.table_id] = (row.order_mode === 0 && row.status === 0) ? 1 : 0;
-    //   });
-    // }
 
     if (tableIds.length > 0) {
       const [[kotRows], [qrRows]] = await Promise.all([
@@ -919,6 +847,188 @@ exports.getRealtimeTableData = async (req, res) => {
         }
       }
 
+
+      if (row.is_booked === 1 && kot_committed !== 1 && qr_committed !== 1) {
+        const [orderRows] = await pool.query(
+          `SELECT is_split FROM orders WHERE table_id = ? AND fooder_id = ? ORDER BY id DESC LIMIT 1`,
+          [row.table_id, fooder_id]
+        );
+        if (orderRows?.length > 0) {
+          is_split = orderRows[0].is_split;
+        }
+      }
+
+      let grandTotal = 0;
+
+      if (kot_committed !== 1 && (row.is_booked === 1 ||  qr_committed === 1)) {
+
+
+        const [[order]] = await pool.query(
+          `SELECT * FROM orders WHERE table_id = ? AND fooder_id = ? AND payment_status = 0 ORDER BY id DESC LIMIT 1`,
+          [row.table_id, fooder_id]
+        );
+
+
+
+        const [orderItems] = await pool.query(
+          `SELECT oi.id, oi.order_id, oi.quantity, oi.product_price, oi.product_proprice, oi.item_tax_type, oi.item_tax_percent, oi.packaging_fee, oi.menu_id, fm.name AS menu_name
+     FROM order_items oi
+     INNER JOIN fooders_menus fm ON oi.menu_id = fm.id
+     WHERE oi.fooder_id = ? AND oi.order_id = ? AND oi.is_cancelled = 0`,
+          [fooder_id, order?.id]
+        );
+
+
+        // ---------- Service Charge ----------
+        let serviceChargeDetails = { percentage: 0 };
+        if (order?.service_charge_details) {
+          try {
+            serviceChargeDetails = JSON.parse(order?.service_charge_details);
+            if (!serviceChargeDetails.percentage) {
+              serviceChargeDetails.percentage = 0;
+            }
+          } catch {
+            serviceChargeDetails = { percentage: 0 };
+          }
+        }
+
+
+
+        // ---------- Totals Calculation ----------
+        let subTotal = 0,
+          tempDiscount = 0,
+          packingCharges = 0,
+          tempServiceCharge = 0,
+          tempTax = 0;
+
+        // Flat Amount Discount adjustment
+        let discountRateForAmount = 0;
+        if (order?.discount_type === 1) {
+          let subTotalForAmount = 0;
+          orderItems.forEach((item) => {
+            const basePrice = parseInt(item.item_tax_type) === 0
+              ? parseFloat(item.product_proprice || item.product_price)
+              : (parseFloat(item.product_proprice || item.product_price) * 100) /
+              (100 + parseFloat(item.item_tax_percent));
+
+            subTotalForAmount += item.quantity * basePrice;
+          });
+          discountRateForAmount =
+            (parseFloat(order?.discount_rate) * 100) / subTotalForAmount;
+        }
+
+        // ---------- Loop through Items ----------
+        orderItems.forEach((item) => {
+          packingCharges += item.quantity * parseFloat(item.packaging_fee);
+
+          const basePrice = parseInt(item.item_tax_type) === 0
+            ? parseFloat(item.product_proprice || item.product_price)
+            : (parseFloat(item.product_proprice || item.product_price) * 100) /
+            (100 + parseFloat(item.item_tax_percent));
+
+          subTotal += item.quantity * basePrice;
+
+          // Apply Discount
+          const discountRow =
+            order?.discount_type === 0
+              ? ((item.quantity * basePrice) * parseFloat(order?.discount_rate)) / 100
+              : ((item.quantity * basePrice) * parseFloat(discountRateForAmount)) / 100;
+
+          tempDiscount += discountRow;
+
+          // Service Charge
+          const serviceChargeRow =
+            ((item.quantity * basePrice - discountRow) *
+              parseFloat(serviceChargeDetails.percentage)) /
+            100;
+          tempServiceCharge += serviceChargeRow;
+
+          // Tax
+          tempTax +=
+            ((item.quantity * basePrice + serviceChargeRow - discountRow) *
+              parseFloat(item.item_tax_percent)) /
+            100;
+        });
+
+        // ---------- Grand Total ----------
+        if (order?.order_type !== "dine_in") {
+          grandTotal = (
+            subTotal +
+            tempServiceCharge -
+            tempDiscount +
+            tempTax +
+            packingCharges +
+            order?.round_up_amount
+          ).toFixed(2);
+        } else {
+          grandTotal = (
+            subTotal +
+            tempServiceCharge -
+            tempDiscount +
+            tempTax +
+            order?.round_up_amount
+          ).toFixed(2);
+        }
+
+      }
+
+      if (kot_committed === 1) {
+        // const [[kot_grand_total]] = await pool.query(
+        //   `SELECT SUM(CAST(JSON_UNQUOTE(jt.withOutTaxPrice) AS DECIMAL(10,2))) AS grand_total  FROM fooders_kot fk JOIN JSON_TABLE( fk.kot_details, '$[*]' COLUMNS ( withOutTaxPrice VARCHAR(50) PATH '$.withOutTaxPrice' ) ) jt WHERE fk.created_date >= UNIX_TIMESTAMP(CURDATE()) AND fk.fooder_id = ? AND fk.table_id = ? AND fk.is_cancelled = 0 AND fk.id NOT IN ( SELECT oi.product_kot_id FROM order_items oi );`,
+        //   [fooder_id, row.table_id]
+        // );
+
+        const [[kot_grand_total]] = await pool.query(
+          `SELECT 
+    SUM(
+        CAST(JSON_UNQUOTE(jt.withOutTaxPrice) AS DECIMAL(10,2)) 
+        * CAST(JSON_UNQUOTE(jt.quantity) AS DECIMAL(10,2))
+    ) AS grand_total
+FROM fooders_kot fk
+JOIN JSON_TABLE(
+    CASE 
+        WHEN JSON_VALID(fk.kot_details) THEN fk.kot_details 
+        ELSE '[]' 
+    END,
+    '$[*]' COLUMNS (
+        product_id INT PATH '$.product_id',
+        withOutTaxPrice VARCHAR(50) PATH '$.withOutTaxPrice',
+        quantity VARCHAR(50) PATH '$.quantity'
+    )
+) jt
+WHERE fk.created_date >= UNIX_TIMESTAMP(CURDATE())
+  AND fk.fooder_id = ?
+  AND fk.table_id = ?
+  AND fk.is_cancelled = 0
+  AND fk.id NOT IN (
+        SELECT oi.product_kot_id 
+        FROM order_items oi
+  )
+  AND NOT EXISTS (
+      SELECT 1
+      FROM JSON_TABLE(
+          CASE 
+              WHEN JSON_VALID(fk.remove_items) THEN fk.remove_items 
+              ELSE '[]' 
+          END,
+          '$[*]' COLUMNS (
+              product_id INT PATH '$.product_id'
+          )
+      ) rj
+      WHERE rj.product_id = jt.product_id
+  );
+
+
+`,
+          [fooder_id, row.table_id]
+        );
+ 
+        if (kot_grand_total.grand_total) {
+          grandTotal = kot_grand_total.grand_total
+        }
+
+      }
+
       categoryMap.get(categoryId).table_categoryName_data.push({
         table_name: row.table_name,
         table_no: row.table_no,
@@ -929,6 +1039,7 @@ exports.getRealtimeTableData = async (req, res) => {
         qr_committed,
         pos_committed: row.is_booked,
         kot_committed,
+        table_amount: grandTotal,
         created_by: JSON.parse(row.created_by),
         ...(is_split !== null ? { is_split } : {}),
       });

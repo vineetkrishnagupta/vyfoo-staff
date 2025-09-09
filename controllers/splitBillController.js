@@ -48,8 +48,8 @@ const config = require('../config/config');
 async function calculateStock(id, connection, fooder_id) {
 
     // console.log("Calculating stock for order_id:", id, "fooder_id:", fooder_id);
-  const [result] = await connection.query(
-    `
+    const [result] = await connection.query(
+        `
     SELECT dish_recipes.id as dish_recipes_id, order_items.product_id, order_items.quantity,
     dish_recipes_item.raw_material_id, dish_recipes_item.quantity as item_quantity, dish_recipes_item.unit, dish_recipes_item.order_type,measurement_units.unit_name,measurement_units.unit_code
     FROM order_items
@@ -59,168 +59,168 @@ async function calculateStock(id, connection, fooder_id) {
     JOIN measurement_units ON measurement_units.id = dish_recipes_item.unit
     WHERE order_items.order_id = ?
     `,
-    [id]
-  );
+        [id]
+    );
 
-  const transformedResult = {};
-  result.forEach((row) => {
-    const {
-      dish_recipes_id,
-      product_id,
-      quantity,
-      raw_material_id,
-      item_quantity,
-      unit,
-      order_type,
-      unit_name,
-      unit_code,
-    } = row;
+    const transformedResult = {};
+    result.forEach((row) => {
+        const {
+            dish_recipes_id,
+            product_id,
+            quantity,
+            raw_material_id,
+            item_quantity,
+            unit,
+            order_type,
+            unit_name,
+            unit_code,
+        } = row;
 
-    if (!transformedResult[dish_recipes_id]) {
-      transformedResult[dish_recipes_id] = {
-        dish_recipes_id,
-        product_id,
-        quantity,
-        recipe_items: [],
-      };
-    }
-
-    transformedResult[dish_recipes_id].recipe_items.push({
-      raw_material_id,
-      item_quantity,
-      unit,
-      order_type,
-      unit_name,
-      unit_code,
-    });
-  });
-  //console.log("transformedResult",transformedResult);
-
-  const [stockList] = await connection.query(
-    `SELECT fi.id,fi.raw_material_id,fi.raw_material_name,fi.opening_stock,fi.purchase,fi.sales,fi.closing_stock,rm.measurement_unit,rm.conversion_rate, mu.unit_name FROM fooders_inventory fi JOIN raw_materials as rm ON fi.raw_material_id = rm.id JOIN measurement_units mu ON mu.id = rm.measurement_unit_id WHERE fi.fooder_id = ? order by fi.id DESC`,
-    [fooder_id]
-  );
-
-  const formattedResults = stockList.map((item) => ({
-    ...item,
-    raw_material_name: `${item.raw_material_name} (${item.measurement_unit})`,
-  }));
-
-  //console.log("formattedResults",formattedResults);
-
-  // Calculate total unit based on material_data.recipe_items.raw_material_id
-  const totalUnits = {};
-
-  Object.values(transformedResult).forEach((materialItem) => {
-    materialItem.recipe_items.forEach((recipeItem) => {
-      const { raw_material_id, item_quantity, unit_name, unit_code } =
-        recipeItem;
-
-      const totalQuantity = item_quantity * materialItem.quantity;
-
-      if (!totalUnits[raw_material_id]) {
-        totalUnits[raw_material_id] = {
-          raw_material_id,
-          total_quantity: 0,
-          unit_name,
-          unit_code,
-        };
-      }
-
-      totalUnits[raw_material_id].total_quantity += totalQuantity;
-    });
-  });
-
-  ///////////////////////////////////////////////////// Fetch opening stock unit for each raw material///////////////////////////////////////////////////////////////////////////////////////////////////
-  const openingStockUnits = {};
-  formattedResults.forEach((item) => {
-    openingStockUnits[item.raw_material_id] = {
-      unit_name: item.unit_name,
-      unit_code: item.unit_code,
-      conversion_rate: item.conversion_rate,
-    };
-  });
-
-  // Convert total_quantity to opening_stock unit
-  const convertedUnits = Object.values(totalUnits).map((unit) => {
-    const openingStockUnit = openingStockUnits[unit.raw_material_id];
-
-    // Check if openingStockUnit is defined before accessing its properties
-    if (openingStockUnit) {
-      const convertedQuantity =
-        unit.total_quantity / openingStockUnit.conversion_rate;
-
-      return {
-        raw_material_id: unit.raw_material_id,
-        opening_stock_quantity: openingStockUnit.opening_stock,
-        total_quantity: convertedQuantity,
-      };
-    } else {
-      // Handle the case where openingStockUnit is undefined (optional)
-      console.error(
-        `Opening stock unit not found for raw_material_id ${unit.raw_material_id}`
-      );
-      return null;
-    }
-  });
-
-  // Filter out null values (if any) from the mapped array
-  const filteredConvertedUnits = convertedUnits.filter((unit) => unit !== null);
-
-  const data = {
-    stock_data: formattedResults,
-    material_data: filteredConvertedUnits,
-  };
-  // console.log("data",data);
-  let stock_data = data.stock_data;
-  let material_data = data.material_data;
-  let updated_stock_data = [];
-
-  for (let stockItem of stock_data) {
-    for (let materialItem of material_data) {
-      if (stockItem.raw_material_id === materialItem.raw_material_id) {
-        let closingStock = parseFloat(stockItem.closing_stock);
-        let salesStock = parseFloat(stockItem.sales);
-        let totalQuantity = materialItem.total_quantity;
-        let originalClosingStock = parseFloat(stockItem.closing_stock);
-
-        // Calculate the new closing_stock
-        let newClosingStock = closingStock - totalQuantity;
-        let newSalesStock = salesStock + totalQuantity;
-
-        // Check if the closing_stock has changed significantly
-        if (Math.abs(newClosingStock - originalClosingStock) > 0) {
-          updated_stock_data.push({
-            ...stockItem,
-            closing_stock: parseFloat(newClosingStock),
-            sales: parseFloat(newSalesStock),
-          });
+        if (!transformedResult[dish_recipes_id]) {
+            transformedResult[dish_recipes_id] = {
+                dish_recipes_id,
+                product_id,
+                quantity,
+                recipe_items: [],
+            };
         }
-      }
+
+        transformedResult[dish_recipes_id].recipe_items.push({
+            raw_material_id,
+            item_quantity,
+            unit,
+            order_type,
+            unit_name,
+            unit_code,
+        });
+    });
+    //console.log("transformedResult",transformedResult);
+
+    const [stockList] = await connection.query(
+        `SELECT fi.id,fi.raw_material_id,fi.raw_material_name,fi.opening_stock,fi.purchase,fi.sales,fi.closing_stock,rm.measurement_unit,rm.conversion_rate, mu.unit_name FROM fooders_inventory fi JOIN raw_materials as rm ON fi.raw_material_id = rm.id JOIN measurement_units mu ON mu.id = rm.measurement_unit_id WHERE fi.fooder_id = ? order by fi.id DESC`,
+        [fooder_id]
+    );
+
+    const formattedResults = stockList.map((item) => ({
+        ...item,
+        raw_material_name: `${item.raw_material_name} (${item.measurement_unit})`,
+    }));
+
+    //console.log("formattedResults",formattedResults);
+
+    // Calculate total unit based on material_data.recipe_items.raw_material_id
+    const totalUnits = {};
+
+    Object.values(transformedResult).forEach((materialItem) => {
+        materialItem.recipe_items.forEach((recipeItem) => {
+            const { raw_material_id, item_quantity, unit_name, unit_code } =
+                recipeItem;
+
+            const totalQuantity = item_quantity * materialItem.quantity;
+
+            if (!totalUnits[raw_material_id]) {
+                totalUnits[raw_material_id] = {
+                    raw_material_id,
+                    total_quantity: 0,
+                    unit_name,
+                    unit_code,
+                };
+            }
+
+            totalUnits[raw_material_id].total_quantity += totalQuantity;
+        });
+    });
+
+    ///////////////////////////////////////////////////// Fetch opening stock unit for each raw material///////////////////////////////////////////////////////////////////////////////////////////////////
+    const openingStockUnits = {};
+    formattedResults.forEach((item) => {
+        openingStockUnits[item.raw_material_id] = {
+            unit_name: item.unit_name,
+            unit_code: item.unit_code,
+            conversion_rate: item.conversion_rate,
+        };
+    });
+
+    // Convert total_quantity to opening_stock unit
+    const convertedUnits = Object.values(totalUnits).map((unit) => {
+        const openingStockUnit = openingStockUnits[unit.raw_material_id];
+
+        // Check if openingStockUnit is defined before accessing its properties
+        if (openingStockUnit) {
+            const convertedQuantity =
+                unit.total_quantity / openingStockUnit.conversion_rate;
+
+            return {
+                raw_material_id: unit.raw_material_id,
+                opening_stock_quantity: openingStockUnit.opening_stock,
+                total_quantity: convertedQuantity,
+            };
+        } else {
+            // Handle the case where openingStockUnit is undefined (optional)
+            console.error(
+                `Opening stock unit not found for raw_material_id ${unit.raw_material_id}`
+            );
+            return null;
+        }
+    });
+
+    // Filter out null values (if any) from the mapped array
+    const filteredConvertedUnits = convertedUnits.filter((unit) => unit !== null);
+
+    const data = {
+        stock_data: formattedResults,
+        material_data: filteredConvertedUnits,
+    };
+    // console.log("data",data);
+    let stock_data = data.stock_data;
+    let material_data = data.material_data;
+    let updated_stock_data = [];
+
+    for (let stockItem of stock_data) {
+        for (let materialItem of material_data) {
+            if (stockItem.raw_material_id === materialItem.raw_material_id) {
+                let closingStock = parseFloat(stockItem.closing_stock);
+                let salesStock = parseFloat(stockItem.sales);
+                let totalQuantity = materialItem.total_quantity;
+                let originalClosingStock = parseFloat(stockItem.closing_stock);
+
+                // Calculate the new closing_stock
+                let newClosingStock = closingStock - totalQuantity;
+                let newSalesStock = salesStock + totalQuantity;
+
+                // Check if the closing_stock has changed significantly
+                if (Math.abs(newClosingStock - originalClosingStock) > 0) {
+                    updated_stock_data.push({
+                        ...stockItem,
+                        closing_stock: parseFloat(newClosingStock),
+                        sales: parseFloat(newSalesStock),
+                    });
+                }
+            }
+        }
     }
-  }
-  //console.log("updated_stock_data", updated_stock_data);
-  if (updated_stock_data.length > 0) {
-    await connection.query(`
+    //console.log("updated_stock_data", updated_stock_data);
+    if (updated_stock_data.length > 0) {
+        await connection.query(`
  UPDATE fooders_inventory
   SET 
     closing_stock = CASE
       ${updated_stock_data
-        .map((item) => `WHEN id = ${item.id} THEN ${item.closing_stock}`)
-        .join(" ")}
+                .map((item) => `WHEN id = ${item.id} THEN ${item.closing_stock}`)
+                .join(" ")}
       ELSE closing_stock
     END,
     sales = CASE
       ${updated_stock_data
-        .map((item) => `WHEN id = ${item.id} THEN ${item.sales}`)
-        .join(" ")}
+                .map((item) => `WHEN id = ${item.id} THEN ${item.sales}`)
+                .join(" ")}
       ELSE sales
     END
   WHERE id IN (${updated_stock_data.map((item) => item.id).join(", ")}) AND fooder_id = ${fooder_id}
 `);
-  }
+    }
 
-  //   connection.release();
+    //   connection.release();
 };
 
 const getOrderItems = async (req, res) => {
@@ -237,14 +237,14 @@ const getOrderItems = async (req, res) => {
         }
 
         const connection = await pool.getConnection();
-        
+
         try {
             const result = await getOrderItemsUtil(connection, fooder_id, table_id, lastOrderId);
 
             if (result.status === 'error') {
                 return res.status(400).json(result);
             }
-            
+
             return res.status(200).json(result);
         } finally {
             connection.release();
@@ -280,7 +280,7 @@ const getOrderItems = async (req, res) => {
 //         }
 
 //         const connection = await pool.getConnection();
-        
+
 //         try {
 //             // Fetch order status for validations
 //             const [[orderRow]] = await connection.query(
@@ -520,19 +520,22 @@ const createSplitBill = async (req, res) => {
                 }
 
                 // Insert bill record with total_tax
+ 
+
                 const [billResult] = await connection.query(
-                    `INSERT INTO orders_bills (order_id, fooder_id, bill_no, amount_data, items_data, customer_data, ip, creation_date, total_tax)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    `INSERT INTO orders_bills (order_id, fooder_id, bill_no, amount_data, items_data, customer_data, ip, creation_date, total_tax, payment_data)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                     [
                         order_id,
                         fooder_id,
                         row.bill_number,
-                        JSON.stringify(row.amount_details),
-                        JSON.stringify(row.items_details),
+                        JSON.stringify(row.amount_details||{}),
+                        JSON.stringify(row.items_details||{}),
                         JSON.stringify(row.customer_details || {}),
                         req.ipAddress,
                         creation_date,
-                        total_tax
+                        total_tax,
+                        '{}'
                     ]
                 );
 
@@ -754,19 +757,59 @@ const getSplitBillItems = async (req, res) => {
             };
 
             const [orderRows] = await connection.query(
-                `SELECT invoice_no FROM orders WHERE id = ? AND fooder_id = ?`,
+                `SELECT invoice_no, order_number_qrcode, table_id FROM orders WHERE id = ? AND fooder_id = ?`,
                 [order_id, fooder_id]
             );
 
             const invoiceNumber = orderRows[0]?.invoice_no || null;
+            const orderNumber = orderRows[0]?.order_number_qrcode || null;
+            const tableId = orderRows[0]?.table_id || null;
+
+
             const invoice_number = invoiceNumber
                 ? `${config.invoice_number_prefix}${invoiceNumber}`
                 : "";
+
+
+
+
+
+
+            let table_no = "";
+            if (tableId) {
+                const [tableDetails] = await connection.query(
+                    `SELECT type, table_no, table_name FROM fooders_tables WHERE id = ?`,
+                    [tableId]
+                );
+
+                if (tableDetails.length > 0) {
+                    const type = tableDetails[0].type;
+                    if (type === 0 || type === 2) {
+                        if (tableDetails[0].table_name) {
+                            table_no = `${tableDetails[0].table_name}-${tableDetails[0].table_no}`;
+                        } else {
+                            table_no = `Table No - ${tableDetails[0].table_no}`;
+                        }
+                    } else {
+                        table_no = `${tableDetails[0].table_no}`;
+                    }
+                }
+            }
+
+
+
+
+
+
+
+
 
             // Build response
             const responseData = {
                 id: bill.id,
                 order_id: bill.order_id,
+                order_number: orderNumber,
+                table_no: table_no,
                 fooder_id: bill.fooder_id,
                 payment_id: bill.payment_id,
                 bill_no: bill.bill_no,
@@ -1000,7 +1043,7 @@ const updateOrderWithSplitAverages = async (orderId, db, fooder_id) => {
 //             const key = `${String(item.product_id)}_${String(item.local_time)}`;
 //             const billedQty = Number(billedQuantityMap.get(key) || 0);
 //             const originalQty = Number(item.quantity || 0);
-            
+
 //             if (billedQty < originalQty) {
 //                 allItemsBilled = false;
 //                 break;
@@ -1149,7 +1192,7 @@ const markSplitBillAsPaid = async (req, res) => {
         let discountType = 0;
         let discountRate = "0";
         let discountAmount = 0;
-        
+
         if (billRows.length > 0) {
             try {
                 customer_data = JSON.parse(billRows[0].customer_data || '{}');
@@ -1170,7 +1213,7 @@ const markSplitBillAsPaid = async (req, res) => {
             `SELECT table_id FROM orders WHERE id = ? AND fooder_id = ?`,
             [order_id, fooder_id]
         );
-        
+
         if (orderTable.length > 0 && orderTable[0].table_id) {
             const [tableDetails] = await connection.query(
                 `SELECT type, table_no, table_name FROM fooders_tables WHERE id = ?`,
@@ -1236,7 +1279,7 @@ const markSplitBillAsPaid = async (req, res) => {
             const key = `${String(item.product_id)}_${String(item.local_time)}`;
             const billedQty = Number(billedQuantityMap.get(key) || 0);
             const originalQty = Number(item.quantity || 0);
-            
+
             if (billedQty < originalQty) {
                 allItemsBilled = false;
                 break;
@@ -1354,7 +1397,7 @@ const cancellBill = async (req, res) => {
         }
 
         const connection = await pool.getConnection();
-        
+
         try {
             // Check if the bill exists and is not already paid
             const [billRows] = await connection.query(

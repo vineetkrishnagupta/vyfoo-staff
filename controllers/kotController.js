@@ -1973,18 +1973,23 @@ exports.kotDetails = async (req, res) => {
         JSON.parse(entry.remove_items || "[]").map((i) => i.local_id)
       );
 
-      const kotDetailsWithTableNo = kotDetails.map((item) => {
-        let tableNo = null;
-        if (entry.table_type !== null) {
-          tableNo =
-            entry.table_type === 0
-              ? entry.table_name && entry.table_name !== ""
-                ? `${entry.table_name}-${entry.table_no}`
-                : `Table No- ${entry.table_no}`
-              : `${entry.table_no}`;
-        }
-        return { ...item, table_no: tableNo };
-      });
+       const kotDetailsWithTableNo = kotDetails.map((item) => {
+          let tableNo = null;
+
+          if (entry.table_type !== null) {
+            if (entry.table_type === 0 || entry.table_type === 2) {
+              if (entry.table_name) {
+                tableNo = `${entry.table_name}-${entry.table_no}`;
+              } else {
+                tableNo = `Table No - ${entry.table_no}`;
+              }
+            } else {
+              tableNo = `${entry.table_no}`;
+            }
+          }
+
+          return { ...item, table_no: tableNo };
+        });
 
       const groupedDetails = {};
       kotDetailsWithTableNo.forEach((item) => {

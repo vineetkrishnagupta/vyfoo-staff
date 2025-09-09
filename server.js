@@ -17,6 +17,7 @@ app.use(cors({
     'http://localhost:3000',
     'http://localhost:5173',
     'https://pos.scanka.com',
+    'https://staffpos.shunyape.com',
     'https://staffpos.shunyape.com'
   ],
   credentials: true,

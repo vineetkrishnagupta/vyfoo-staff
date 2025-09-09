@@ -10,6 +10,8 @@ exports.switchTable = async (req, res) => {
     const fooder_id = req.staff.fooder_id;
     const { from_table_id, to_table_id, kot_ids } = req.body;
 
+
+     
     // Check if both tables exist
     const [fromTable] = await connection.query(
       `SELECT * FROM fooders_tables WHERE id = ? AND fooder_id = ?`,
@@ -29,8 +31,8 @@ exports.switchTable = async (req, res) => {
       });
     }
 
-    // Check if to_table is free
-    if (toTable[0].is_booked == 1) {
+ 
+    if (toTable[0].is_booked === 1) {
       connection.release();
       return res.status(400).send({
         status: "fail",
@@ -865,6 +867,47 @@ exports.switchTable = async (req, res) => {
   const connection = await db.getConnection();
 
   try {
+
+
+
+
+
+
+
+// Check if both tables exist
+    const [fromTable] = await connection.query(
+      `SELECT * FROM fooders_tables WHERE id = ? AND fooder_id = ?`,
+      [old_table_id, fooder_id]
+    );
+
+    const [toTable] = await connection.query(
+      `SELECT * FROM fooders_tables WHERE id = ? AND fooder_id = ?`,
+      [new_table_id, fooder_id]
+    );
+
+    if (!fromTable.length || !toTable.length) {
+      connection.release();
+      return res.status(400).send({
+        status: "fail",
+        message: "Invalid table IDs",
+      });
+    }
+
+ 
+    if (toTable[0].is_booked === 1) {
+      connection.release();
+      return res.status(400).send({
+        status: "fail",
+        message: "Table is already booked!",
+      });
+    }
+
+
+
+
+
+
+
     // console.log('[1] Validating staff...');
     // const staffResult = await getAndValidateStaff(req, connection, passcode, allowedUsers);
     // if (staffResult.error) {

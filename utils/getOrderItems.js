@@ -479,8 +479,197 @@ async function getOrderItemsByOrderIdUtils(connection, fooder_id, order_id) {
   };
 }
 
+async function getOrderItemsByOrderIdUtils2(connection, fooder_id, order_id) {
+  // Order basic info लाना
+  const [orderIdRow] = await connection.query(
+    `SELECT o.id, o.is_nc, o.table_id, o.order_type, ft.table_no
+     FROM orders o
+     LEFT JOIN fooders_tables ft ON ft.id = o.table_id
+     WHERE o.fooder_id = ? AND o.id = ? AND o.is_cancelled = 0 AND o.status != 4
+     LIMIT 1`,
+    [fooder_id, order_id]
+  );
+
+  let formattedKotDetails = [];
+  let is_nc = false;
+  let eaterDetails = {};
+  let discountDetails = {};
+  let order_service_charge = {};
+  let table_no = null;
+  let table_id = null;
+  let order_type = null;
+
+  if (orderIdRow.length > 0) {
+    is_nc = orderIdRow[0].is_nc == 1 ? true : false;
+    table_no = orderIdRow[0].table_no || null;
+    table_id = orderIdRow[0].table_id || null;
+    order_type = orderIdRow[0].order_type || null;
+
+    // Order items लाना (अब fooders_kot हट गया है)
+    const [orderItems] = await connection.query(
+      `SELECT 
+         oi.*, 
+         fs.id AS staff_id,
+         fs.name AS staff_name,
+         o.order_number_qrcode,
+         o.service_charge_details,
+         o.address,
+         o.eater_phonenumber,
+         o.eater_suggestions,
+         o.no_of_eaters,
+         o.eater_name,
+         o.discount_type,
+         o.discount_rate,
+         fp.min_order_quantity
+       FROM order_items oi
+       LEFT JOIN orders o ON o.id = oi.order_id
+       LEFT JOIN fooder_staff fs ON fs.id = o.waiter_id
+       LEFT JOIN fooders_products fp ON fp.id = oi.product_id
+       WHERE oi.order_id = ? 
+         AND oi.is_cancelled = 0`,
+      [order_id]
+    );
+
+    if (orderItems.length > 0) {
+      const first = orderItems[0];
+      eaterDetails = {
+        eater_name: first.eater_name || null,
+        eater_phonenumber: first.eater_phonenumber || null,
+        eater_suggestions: first.eater_suggestions || null,
+        address: first.address || null
+      };
+      discountDetails = {
+        discount_type: first.discount_type ?? null,
+        discount_value: first.discount_rate ?? null
+      };
+      order_service_charge = { name: "SCH", percentage: 0 };
+      if (first.service_charge_details) {
+        try {
+          const parsed = typeof first.service_charge_details === "string"
+            ? JSON.parse(first.service_charge_details)
+            : first.service_charge_details;
+          if (parsed && typeof parsed === "object") {
+            order_service_charge = {
+              name: parsed.name || "SCH",
+              percentage: typeof parsed.percentage === "number"
+                ? parsed.percentage
+                : Number(parsed.percentage) || 0
+            };
+          }
+        } catch (e) {}
+      }
+    }
+
+    for (const item of orderItems) {
+      const variantDetails = item.variant_details ? JSON.parse(item.variant_details) : null;
+      const formattedAddons = item.addons_items_details ? JSON.parse(item.addons_items_details) : [];
+
+      const price = Number(item.product_price || item.price || 0);
+      const taxPercent = Number(item.item_tax_percent || 0);
+      const itemTaxType = typeof item.item_tax_type !== 'undefined' ? Number(item.item_tax_type) : 0;
+
+      let withOutTaxPrice;
+      if (itemTaxType === 0) {
+        withOutTaxPrice = price;
+      } else if (itemTaxType === 1) {
+        withOutTaxPrice = (price * 100) / (100 + taxPercent);
+      } else {
+        withOutTaxPrice = price;
+      }
+      const taxAmount = Math.round(price - withOutTaxPrice);
+
+      let staffDetails = {
+        staff_id: item.staff_id || null,
+        staff_name: item.staff_name || null
+      };
+
+      let product_special_note = null;
+      if (typeof item.product_special_note !== 'undefined') {
+        product_special_note = item.product_special_note;
+      }
+
+      formattedKotDetails.push({
+        id: item.product_id || item.id,
+        name: item.product_name || item.name,
+        quantity: item.quantity || 1,
+        price,
+        menu_id: item.menu_id || null,
+        selectedvariants: variantDetails
+          ? {
+              variantId: variantDetails.variantId,
+              combination_details: variantDetails.combination_details || []
+            }
+          : null,
+        addons: formattedAddons.map(addon => ({
+          addon_item_name: addon.addon_item_name || addon.name
+        })),
+        selected_addons: formattedAddons,
+        packaging_fee: Number(item.packaging_fee || 0),
+        isKOT: false, // अब KOT concept नहीं है
+        isSaved: true,
+        orderId: item.order_id || null,
+        orderNo: item.order_number_qrcode,
+        tax_percent: taxPercent,
+        tax_amount: taxAmount,
+        withOutTaxPrice,
+        tax_type: itemTaxType,
+        staffDetails,
+        kot_timestamp: item.creation_date || null, // सिर्फ creation_date रहेगा
+        local_id: item.local_time || null,
+        no_of_eaters: item.no_of_eaters || null,
+        min_order_quantity: item.min_order_quantity || null,
+        product_special_note
+      });
+    }
+  }
+
+  // अब sort सिर्फ creation_date से होगा
+  formattedKotDetails.sort((a, b) => {
+    const parseTimestamp = (ts) => {
+      if (!ts) return 0;
+      if (!isNaN(ts)) {
+        const num = Number(ts);
+        return num > 1e12 ? num : num * 1000;
+      }
+      return Date.parse(ts) || 0;
+    };
+    const t1 = parseTimestamp(a.kot_timestamp);
+    const t2 = parseTimestamp(b.kot_timestamp);
+    return t1 - t2;
+  });
+
+  let table_no_formatted = '';
+  if (table_id) {
+    const [tableRows] = await connection.query(
+      `SELECT type, table_no, table_name FROM fooders_tables WHERE id = ?`,
+      [table_id]
+    );
+    if (tableRows.length > 0) {
+      const table = tableRows[0];
+      if (table.type === 0 || table.type === 2) {
+        table_no_formatted = table.table_name
+          ? `${table.table_name}-${table.table_no}`
+          : `Table No - ${table.table_no}`;
+      } else {
+        table_no_formatted = `${table.table_no}`;
+      }
+    }
+  }
+
+  return {
+    items: formattedKotDetails,
+    eaterDetails,
+    discountDetails,
+    order_service_charge,
+    is_nc,
+    table_no: table_no_formatted,
+    table_id,
+    order_type
+  };
+}
 
 module.exports = {
   getOrderItems,
-  getOrderItemsByOrderIdUtils
+  getOrderItemsByOrderIdUtils,
+  getOrderItemsByOrderIdUtils2
 };

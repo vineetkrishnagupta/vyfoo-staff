@@ -2,7 +2,7 @@ const db = require('../config/db');
 const pool = db;
 const config = require('../config/config');
 const { getAndValidateStaff } = require('../utils/GetAndValidateStaff');
-const { getOrderItemsByOrderIdUtils } = require('../utils/getOrderItems');
+const { getOrderItemsByOrderIdUtils, getOrderItemsByOrderIdUtils2 } = require('../utils/getOrderItems');
 const { getTableItems } = require('../utils/getTableItems');
 const socketManager = require('../socketManager');
 
@@ -3216,87 +3216,231 @@ exports.updateLiveOrderAction = async (req, res) => {
   }
 };
 
-exports.discountApply = async (req, res) => {
+// exports.discountApply = async (req, res) => {
 
-  const { id, discount_type, discount_rate } = req.body;
-  const connection = await db.getConnection();
-  try {
+//   const { id, discount_type, discount_rate } = req.body;
+//   const connection = await db.getConnection();
+//   try {
 
-    if (
-      !id ||
-      discount_type === undefined ||
-      !(discount_type === 0 || discount_type === 1) || // Only 0 or 1 allowed
-      discount_rate === undefined ||
-      discount_rate === null ||
-      discount_rate === '' ||
-      (typeof discount_rate === 'string' && discount_rate.trim() === '') ||
-      isNaN(discount_rate)
-    ) {
-      connection.release();
-      return res.status(400).send({
-        status: "fail",
-        message: "Valid Order ID, discount type (0 or 1), and numeric discount rate are required",
-      });
-    }
+//     if (
+//       !id ||
+//       discount_type === undefined ||
+//       !(discount_type === 0 || discount_type === 1) || // Only 0 or 1 allowed
+//       discount_rate === undefined ||
+//       discount_rate === null ||
+//       discount_rate === '' ||
+//       (typeof discount_rate === 'string' && discount_rate.trim() === '') ||
+//       isNaN(discount_rate)
+//     ) {
+//       connection.release();
+//       return res.status(400).send({
+//         status: "fail",
+//         message: "Valid Order ID, discount type (0 or 1), and numeric discount rate are required",
+//       });
+//     }
 
 
-    const [ordersCheckStatus] = await connection.query(
-      "SELECT payment_status, is_cancelled FROM orders WHERE id = ?",
-      [id]
-    );
+//     const [ordersCheckStatus] = await connection.query(
+//       "SELECT payment_status, is_cancelled FROM orders WHERE id = ?",
+//       [id]
+//     );
 
-    if (ordersCheckStatus.length > 0) {
-      if (ordersCheckStatus[0].payment_status === 1 || ordersCheckStatus[0].payment_status === 3) {
-        connection.release();
-        return res.status(400).send({
-          status: "fail",
-          message: "Order already paid",
-        });
-      }
-      if (ordersCheckStatus[0].is_cancelled != 0) {
-        connection.release();
-        return res.status(400).send({
-          status: "fail",
-          message: "Order already cancelled!!!",
-        });
-      }
-    }
+//     if (ordersCheckStatus.length > 0) {
+//       if (ordersCheckStatus[0].payment_status === 1 || ordersCheckStatus[0].payment_status === 3) {
+//         connection.release();
+//         return res.status(400).send({
+//           status: "fail",
+//           message: "Order already paid",
+//         });
+//       }
+//       if (ordersCheckStatus[0].is_cancelled != 0) {
+//         connection.release();
+//         return res.status(400).send({
+//           status: "fail",
+//           message: "Order already cancelled!!!",
+//         });
+//       }
+//     }
 
-    const updateDiscountQuery = `UPDATE orders SET discount_type = ?,discount_rate =? WHERE id = ? AND fooder_id = ? AND is_cancelled = 0 AND payment_status != 1`;
-    const [result] = await connection.query(updateDiscountQuery, [
-      discount_type,
-      discount_rate,
-      id,
-      req.staff.fooder_id
-    ]);
+//     const updateDiscountQuery = `UPDATE orders SET discount_type = ?,discount_rate =?, round_up_amount = 0 WHERE id = ? AND fooder_id = ? AND is_cancelled = 0 AND payment_status != 1`;
+//     const [result] = await connection.query(updateDiscountQuery, [
+//       discount_type,
+//       discount_rate,
+//       id,
+//       req.staff.fooder_id
+//     ]);
 
-    if (result && result.affectedRows === 0) {
-      connection.release();
 
-      return res
-        .status(400)
-        .send({ message: "Discount not applied, something went wrong" });
-    }
 
-    updateOrderAmount(req.staff.fooder_id, id, connection)
-    connection.release();
 
-    return res.status(200).send({
-      status: "success",
-      message: "Discount applied successfully",
-    });
-  } catch (error) {
-    connection.release();
-    if (connection) {
-      connection.release();
-    }
-    console.log(error);
-    res.status(500).json({
-      message: "Internal server error",
-      errors: error.toString(),
-    });
-  }
-};
+
+
+// const [[order]] = await connection.query(
+//       "SELECT * FROM orders WHERE id = ?",
+//       [id]
+//     );
+
+// const orderItems = await fetchOrderItemsData(
+//                req.staff.fooder_id,
+//        id,
+//           connection
+//         );
+
+
+
+
+
+//         let serviceChargeDetails = { percentage: 0 };
+
+//         if (order.service_charge_details !== null) {
+//           serviceChargeDetails = JSON.parse(order.service_charge_details);
+
+//           if (!serviceChargeDetails.percentage) {
+//             serviceChargeDetails.percentage = 0
+//           }
+
+//         } else {
+//           serviceChargeDetails = { percentage: 0 }
+//         }
+
+
+
+//         let withOutTaxPrice = 0
+//         let subTotal = 0;
+//         let tempDiscount = 0;
+//         let tempDiscountRow = 0;
+
+
+//         let tempServicCharge = 0;
+//         let tempServicChargeRow = 0;
+
+//         let tempTax = 0;
+//         // let tempTaxRow = 0;
+
+
+//         let packingCharges = 0;
+
+
+
+
+//         //  for flate amount discount
+
+//         let withOutTaxPriceForAmount = 0
+//         let subTotalForAmount = 0;
+//         let discountRateForAmount = 0;
+
+//         if (order.discount_type === 1) {
+//           orderItems.forEach((i) => {
+//             if (i.product_proprice) {
+//               withOutTaxPriceForAmount = parseInt(i.item_tax_type) === 0 ? parseFloat(i.product_proprice) : (parseFloat(i.product_proprice) * parseFloat(100)) / (parseFloat(100) + parseFloat(i.item_tax_percent))
+//             } else {
+//               withOutTaxPriceForAmount = parseInt(i.item_tax_type) === 0 ? parseFloat(i.product_price) : (parseFloat(i.product_price) * parseFloat(100)) / (parseFloat(100) + parseFloat(i.item_tax_percent))
+//             }
+//             subTotalForAmount += (i.quantity) * withOutTaxPriceForAmount
+//           })
+//           discountRateForAmount = (parseFloat(order.discount_rate) * 100) / subTotalForAmount
+//         }
+//         // end
+
+
+//         orderItems.forEach((i) => {
+//           packingCharges += i.quantity * parseFloat(i.packaging_fee)
+
+
+
+//           if (i.product_proprice) {
+//             withOutTaxPrice = parseInt(i.item_tax_type) === 0 ? parseFloat(i.product_proprice) : (parseFloat(i.product_proprice) * parseFloat(100)) / (parseFloat(100) + parseFloat(i.item_tax_percent))
+
+//           } else {
+//             withOutTaxPrice = parseInt(i.item_tax_type) === 0 ? parseFloat(i.product_price) : (parseFloat(i.product_price) * parseFloat(100)) / (parseFloat(100) + parseFloat(i.item_tax_percent))
+//           }
+
+
+//           subTotal += (i.quantity) * withOutTaxPrice
+
+
+
+//           if (order.discount_type === 0) {
+//             tempDiscount += (((i.quantity) * withOutTaxPrice) * parseFloat(order.discount_rate)) / 100
+//             tempDiscountRow = (((i.quantity) * withOutTaxPrice) * parseFloat(order.discount_rate)) / 100
+//           } else {
+//             // tempDiscount += (((i.quantity) * withOutTaxPrice) - parseFloat(order.discount_rate))
+//             // tempDiscountRow = (((i.quantity) * withOutTaxPrice) - parseFloat(order.discount_rate))
+//             // tempDiscount += ((i.quantity * withOutTaxPrice) - ((i.quantity * withOutTaxPrice) - parseFloat(order.discount_rate))) * i.quantity
+//             // tempDiscountRow = ((i.quantity * withOutTaxPrice) - ((i.quantity * withOutTaxPrice) - parseFloat(order.discount_rate))) * i.quantity
+//             tempDiscount += (((i.quantity) * withOutTaxPrice) * parseFloat(discountRateForAmount)) / 100
+//             tempDiscountRow = (((i.quantity) * withOutTaxPrice) * parseFloat(discountRateForAmount)) / 100
+//           }
+
+
+//           tempServicCharge += ((((i.quantity) * withOutTaxPrice) - tempDiscountRow) * parseFloat(serviceChargeDetails.percentage)) / 100
+//           tempServicChargeRow = ((((i.quantity) * withOutTaxPrice) - tempDiscountRow) * parseFloat(serviceChargeDetails.percentage)) / 100
+
+
+
+//           tempTax += ((((i.quantity) * withOutTaxPrice) + tempServicChargeRow - tempDiscountRow) * parseFloat(i.item_tax_percent)) / 100
+//         })
+
+
+
+//         var grandTotal = 0
+
+//         if (order.order_type != "dine_in") {
+//           grandTotal = (parseFloat(subTotal + tempServicCharge - tempDiscount + tempTax) + parseFloat(packingCharges) + order.round_up_amount).toFixed(2)
+//         } else {
+//           grandTotal = (subTotal + tempServicCharge - tempDiscount + tempTax + order.round_up_amount).toFixed(2);
+//         }
+
+
+
+//         console.log(grandTotal)
+//         console.log("grandTotal")
+       
+ 
+//   let afterPoint = Math.round(grandTotal) - grandTotal
+ 
+
+//         console.log(afterPoint)
+//         console.log("afterPoint")
+       
+ 
+//       await connection.query(`UPDATE orders SET round_up_amount = ?  WHERE id = ? AND fooder_id = ?  `, [
+//       afterPoint,
+      
+//       id,
+//       req.staff.fooder_id
+//     ]);
+
+
+
+
+//     if (result && result.affectedRows === 0) {
+//       connection.release();
+
+//       return res
+//         .status(400)
+//         .send({ message: "Discount not applied, something went wrong" });
+//     }
+
+//     updateOrderAmount(req.staff.fooder_id, id, connection)
+//     connection.release();
+
+//     return res.status(200).send({
+//       status: "success",
+//       message: "Discount applied successfully",
+//     });
+//   } catch (error) {
+//     connection.release();
+//     if (connection) {
+//       connection.release();
+//     }
+//     console.log(error);
+//     res.status(500).json({
+//       message: "Internal server error",
+//       errors: error.toString(),
+//     });
+//   }
+// };
 
 // exports.getAllBillsToPrint = async (req, res) => {
 //   try {
@@ -3606,6 +3750,204 @@ exports.discountApply = async (req, res) => {
 //   }
 // };
 
+
+exports.discountApply = async (req, res) => {
+  const { id, discount_type, discount_rate } = req.body;
+  const connection = await db.getConnection();
+
+  try {
+    // ---------- Input Validation ----------
+    if (
+      !id ||
+      !(discount_type === 0 || discount_type === 1) ||
+      discount_rate === undefined ||
+      discount_rate === null ||
+      discount_rate === '' ||
+      (typeof discount_rate === 'string' && discount_rate.trim() === '') ||
+      isNaN(discount_rate)
+    ) {
+      return res.status(400).send({
+        status: "fail",
+        message:
+          "Valid Order ID, discount type (0 or 1), and numeric discount rate are required",
+      });
+    }
+
+    // ---------- Check Order Status ----------
+    const [ordersCheckStatus] = await connection.query(
+      "SELECT payment_status, is_cancelled FROM orders WHERE id = ?",
+      [id]
+    );
+
+    if (ordersCheckStatus.length > 0) {
+      const { payment_status, is_cancelled } = ordersCheckStatus[0];
+
+      if ([1, 3].includes(payment_status)) {
+        return res.status(400).send({
+          status: "fail",
+          message: "Order already paid",
+        });
+      }
+
+      if (is_cancelled !== 0) {
+        return res.status(400).send({
+          status: "fail",
+          message: "Order already cancelled!!!",
+        });
+      }
+    }
+
+    // ---------- Apply Discount ----------
+    const updateDiscountQuery = `
+      UPDATE orders 
+      SET discount_type = ?, discount_rate = ?, round_up_amount = 0
+      WHERE id = ? AND fooder_id = ? AND is_cancelled = 0 AND payment_status != 1
+    `;
+    const [result] = await connection.query(updateDiscountQuery, [
+      discount_type,
+      discount_rate,
+      id,
+      req.staff.fooder_id,
+    ]);
+
+    if (!result || result.affectedRows === 0) {
+      return res.status(400).send({
+        status: "fail",
+        message: "Discount not applied, something went wrong",
+      });
+    }
+
+    // ---------- Fetch Order + Items ----------
+    const [[order]] = await connection.query(
+      "SELECT * FROM orders WHERE id = ?",
+      [id]
+    );
+
+    const orderItems = await fetchOrderItemsData(
+      req.staff.fooder_id,
+      id,
+      connection
+    );
+
+    // ---------- Service Charge ----------
+    let serviceChargeDetails = { percentage: 0 };
+    if (order.service_charge_details) {
+      try {
+        serviceChargeDetails = JSON.parse(order.service_charge_details);
+        if (!serviceChargeDetails.percentage) {
+          serviceChargeDetails.percentage = 0;
+        }
+      } catch {
+        serviceChargeDetails = { percentage: 0 };
+      }
+    }
+
+    // ---------- Totals Calculation ----------
+    let subTotal = 0,
+      tempDiscount = 0,
+      packingCharges = 0,
+      tempServiceCharge = 0,
+      tempTax = 0;
+
+    // Flat Amount Discount adjustment
+    let discountRateForAmount = 0;
+    if (order.discount_type === 1) {
+      let subTotalForAmount = 0;
+      orderItems.forEach((item) => {
+        const basePrice = parseInt(item.item_tax_type) === 0
+          ? parseFloat(item.product_proprice || item.product_price)
+          : (parseFloat(item.product_proprice || item.product_price) * 100) /
+            (100 + parseFloat(item.item_tax_percent));
+
+        subTotalForAmount += item.quantity * basePrice;
+      });
+      discountRateForAmount =
+        (parseFloat(order.discount_rate) * 100) / subTotalForAmount;
+    }
+
+    // ---------- Loop through Items ----------
+    orderItems.forEach((item) => {
+      packingCharges += item.quantity * parseFloat(item.packaging_fee);
+
+      const basePrice = parseInt(item.item_tax_type) === 0
+        ? parseFloat(item.product_proprice || item.product_price)
+        : (parseFloat(item.product_proprice || item.product_price) * 100) /
+          (100 + parseFloat(item.item_tax_percent));
+
+      subTotal += item.quantity * basePrice;
+
+      // Apply Discount
+      const discountRow =
+        order.discount_type === 0
+          ? ((item.quantity * basePrice) * parseFloat(order.discount_rate)) / 100
+          : ((item.quantity * basePrice) * parseFloat(discountRateForAmount)) / 100;
+
+      tempDiscount += discountRow;
+
+      // Service Charge
+      const serviceChargeRow =
+        ((item.quantity * basePrice - discountRow) *
+          parseFloat(serviceChargeDetails.percentage)) /
+        100;
+      tempServiceCharge += serviceChargeRow;
+
+      // Tax
+      tempTax +=
+        ((item.quantity * basePrice + serviceChargeRow - discountRow) *
+          parseFloat(item.item_tax_percent)) /
+        100;
+    });
+
+    // ---------- Grand Total ----------
+    let grandTotal = 0;
+    if (order.order_type !== "dine_in") {
+      grandTotal = (
+        subTotal +
+        tempServiceCharge -
+        tempDiscount +
+        tempTax +
+        packingCharges +
+        order.round_up_amount
+      ).toFixed(2);
+    } else {
+      grandTotal = (
+        subTotal +
+        tempServiceCharge -
+        tempDiscount +
+        tempTax +
+        order.round_up_amount
+      ).toFixed(2);
+    }
+
+    // ---------- Round-Off ----------
+    const afterPoint = Math.round(grandTotal) - grandTotal;
+
+    await connection.query(
+      `UPDATE orders SET round_up_amount = ? WHERE id = ? AND fooder_id = ?`,
+      [afterPoint, id, req.staff.fooder_id]
+    );
+
+    // ---------- Final Update ----------
+    await updateOrderAmount(req.staff.fooder_id, id, connection);
+
+    return res.status(200).send({
+      status: "success",
+      message: "Discount applied successfully",
+    });
+  } catch (error) {
+    console.error("discountApply error:", error);
+    return res.status(500).json({
+      status: "error",
+      message: "Internal server error",
+      errors: error.toString(),
+    });
+  } finally {
+    if (connection) connection.release();
+  }
+};
+
+
+
 exports.getAllBillsToPrint = async (req, res) => {
   try {
     const { order_id } = req.query;
@@ -3640,8 +3982,9 @@ exports.getAllBillsToPrint = async (req, res) => {
       const order = orderRows[0];
       const is_split = order.is_split == 1;
       const invoiceNumber = order.invoice_no;
-      const { items: allItems } = await getOrderItemsByOrderIdUtils(connection, fooder_id, order.id);
+      const { items: allItems } = await getOrderItemsByOrderIdUtils2(connection, fooder_id, order.id);
 
+      
       // Fetch table_no using table_id
       let table_no = '';
       if (order.table_id) {

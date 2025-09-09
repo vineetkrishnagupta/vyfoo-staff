@@ -711,7 +711,8 @@ exports.getSalesReportDaily = async (req, res) => {
       `SELECT id, order_date, status, payment_status, creation_date, 
               order_number_qrcode, order_type, service_charge_details, 
               round_up_amount, tax_details, discount_type, discount_rate, 
-              payment_type, no_of_eaters
+              payment_type, no_of_eaters,
+              is_split
        FROM orders
        WHERE fooder_id = ? AND creation_date BETWEEN ? AND ? 
        AND payment_status = 1 AND status IN (1, 2, 3) AND is_cancelled = 0
@@ -746,7 +747,7 @@ exports.getSalesReportDaily = async (req, res) => {
        AND payment_status IN (1, 3) AND status IN (1, 2, 3) AND is_cancelled = 0`,
       [req.staff.fooder_id, timestampOpen, timestampClose]
     );
-    
+
     if (total_orders_all === 0) {
       connection.release();
       return res.status(200).send({ status: "success", message: "Data Not Available.." });
@@ -770,8 +771,8 @@ exports.getSalesReportDaily = async (req, res) => {
       }, {});
     }
 
-    let totalSubtotal = 0, totalDiscount = 0, totalTotal = 0, 
-        totalServiceCharge = 0, totalTax = 0, totalEaters = 0;
+    let totalSubtotal = 0, totalDiscount = 0, totalTotal = 0,
+      totalServiceCharge = 0, totalTax = 0, totalEaters = 0;
     let netSells = 0;
 
     // Initialize reports objects
@@ -824,6 +825,14 @@ exports.getSalesReportDaily = async (req, res) => {
           tempServicChargeRow = (((i.quantity * withOutTaxPrice) - tempDiscountRow) * parseFloat(serviceChargeDetails.percentage)) / 100;
           tempTax += (((i.quantity * withOutTaxPrice) + tempServicChargeRow - tempDiscountRow) * parseFloat(i.item_tax_percent)) / 100;
         });
+
+        if (order.is_split === 1) {
+          const [[total_tax]] = await connection.query(
+            ` SELECT SUM(total_tax) AS total_tax FROM orders_bills WHERE order_id = ?;`,
+            [order.id]
+          );
+          tempTax = total_tax.total_tax
+        }
 
         let grandTotal = 0;
         if (order.order_type != "dine_in") {
@@ -1114,7 +1123,7 @@ exports.getGstReportDetails = async (req, res) => {
 
   try {
     const [getReportResult] = await connection.query(
-      `select id, order_date,status,payment_status, creation_date, order_number_qrcode, service_charge_details,tax_details,discount_type,discount_rate, invoice_no from orders where fooder_id = ? and order_date >= ? AND order_date <= ? and payment_status = 1 and status IN (1, 2, 3) and is_cancelled = 0  ORDER BY id DESC`,
+      `select id, order_date,status,payment_status, creation_date, order_number_qrcode, service_charge_details,tax_details,discount_type,discount_rate, invoice_no, is_split from orders where fooder_id = ? and order_date >= ? AND order_date <= ? and payment_status = 1 and status IN (1, 2, 3) and is_cancelled = 0  ORDER BY id DESC`,
       [req.staff.fooder_id, start_date, end_date]
     );
     if (getReportResult.length === 0) {
@@ -1288,6 +1297,13 @@ exports.getGstReportDetails = async (req, res) => {
           tempTax += ((((i.quantity) * withOutTaxPrice) + tempServicChargeRow - tempDiscountRow) * parseFloat(i.item_tax_percent)) / 100
         })
 
+        if (order.is_split === 1) {
+          const [[total_tax]] = await connection.query(
+            ` SELECT SUM(total_tax) AS total_tax FROM orders_bills WHERE order_id = ?;`,
+            [order.id]
+          );
+          tempTax = total_tax.total_tax
+        }
 
 
         var grandTotal = 0
@@ -1416,7 +1432,7 @@ exports.getOrderReportDetails = async (req, res) => {
     let totalDueAmount = 0; // Initialize total due amount
     if (order_mode) {
       const [getSalesReportResult] = await connection.query(
-        `select id, order_date,status,payment_status, creation_date, order_number_qrcode,order_type, service_charge_details,tax_details,discount_type,discount_rate, round_up_amount ,invoice_no from orders where fooder_id = ? and creation_date BETWEEN ? and ? and ${get_payment_status === 'all' ? `(payment_status IN (0, 1, 2, 3))` : get_payment_status === '0' ? `(payment_status = 0)` : get_payment_status === '1' ? `(payment_status = 1)` : get_payment_status === '2' ? `(payment_status = 2)` : `(payment_status = 3)`} and status IN (1, 2, 3) and is_cancelled = 0 and order_type = ?  ORDER BY id DESC`,
+        `select id, order_date,status,payment_status, creation_date, order_number_qrcode,order_type, service_charge_details, tax_details, discount_type, discount_rate, round_up_amount, invoice_no, is_split from orders where fooder_id = ? and creation_date BETWEEN ? and ? and ${get_payment_status === 'all' ? `(payment_status IN (0, 1, 2, 3))` : get_payment_status === '0' ? `(payment_status = 0)` : get_payment_status === '1' ? `(payment_status = 1)` : get_payment_status === '2' ? `(payment_status = 2)` : `(payment_status = 3)`} and status IN (1, 2, 3) and is_cancelled = 0 and order_type = ?  ORDER BY id DESC`,
         [req.staff.fooder_id, timestampOpen, timestampClose, order_mode]
       );
       // console.log(getSalesReportResult.length)
@@ -1619,6 +1635,13 @@ exports.getOrderReportDetails = async (req, res) => {
             tempTax += ((((i.quantity) * withOutTaxPrice) + tempServicChargeRow - tempDiscountRow) * parseFloat(i.item_tax_percent)) / 100
           })
 
+          if (order.is_split === 1) {
+            const [[total_tax]] = await connection.query(
+              ` SELECT SUM(total_tax) AS total_tax FROM orders_bills WHERE order_id = ?;`,
+              [order.id]
+            );
+            tempTax = total_tax.total_tax
+          }
 
 
           var grandTotal = 0
@@ -1765,7 +1788,7 @@ exports.getOrderReportDetails = async (req, res) => {
       });
     } else {
       const [getSalesReportResult] = await connection.query(
-        `select id, order_date,status,payment_status, order_type,creation_date, order_number_qrcode, service_charge_details,tax_details,discount_type,discount_rate, round_up_amount,invoice_no from orders where fooder_id = ? and creation_date BETWEEN ? and ? and payment_status IN (0, 1, 2, 3) and ${get_payment_status === 'all' ? `(payment_status IN (0, 1, 2, 3))` : get_payment_status === '0' ? `(payment_status = 0)` : get_payment_status === '1' ? `(payment_status = 1)` : get_payment_status === '2' ? `(payment_status = 2)` : `(payment_status = 3)`} and is_cancelled = 0  ORDER BY id DESC`,
+        `select id, order_date,status,payment_status, order_type,creation_date, order_number_qrcode, service_charge_details,tax_details,discount_type,discount_rate, round_up_amount,invoice_no, is_split from orders where fooder_id = ? and creation_date BETWEEN ? and ? and payment_status IN (0, 1, 2, 3) and ${get_payment_status === 'all' ? `(payment_status IN (0, 1, 2, 3))` : get_payment_status === '0' ? `(payment_status = 0)` : get_payment_status === '1' ? `(payment_status = 1)` : get_payment_status === '2' ? `(payment_status = 2)` : `(payment_status = 3)`} and is_cancelled = 0  ORDER BY id DESC`,
         [req.staff.fooder_id, timestampOpen, timestampClose]
       );
       if (getSalesReportResult.length === 0) {
@@ -1959,6 +1982,13 @@ exports.getOrderReportDetails = async (req, res) => {
           })
 
 
+          if (order.is_split === 1) {
+            const [[total_tax]] = await connection.query(
+              ` SELECT SUM(total_tax) AS total_tax FROM orders_bills WHERE order_id = ?;`,
+              [order.id]
+            );
+            tempTax = total_tax.total_tax
+          }
 
           var grandTotal = 0
 
@@ -3327,7 +3357,7 @@ exports.getCustomisedSalesReport = async (req, res) => {
   try {
     const orderTypeTotals = {};
     const orderTypeCounts = {};
-    const getReportResultQuery = `select id, order_date,status,payment_status, creation_date, order_number_qrcode,order_type, service_charge_details,tax_details,discount_type,discount_rate,round_up_amount, payment_type,no_of_eaters from orders where ${get_order_mode !== 'all' ? `order_type = '${get_order_mode}'` : '1 = 1'} and fooder_id = ? and creation_date BETWEEN ? and ? and payment_status = 1 and status IN (1, 2, 3) and is_cancelled = 0 
+    const getReportResultQuery = `select id, order_date,status,payment_status, creation_date, order_number_qrcode,order_type, service_charge_details,tax_details,discount_type,discount_rate,round_up_amount, payment_type,no_of_eaters, is_split from orders where ${get_order_mode !== 'all' ? `order_type = '${get_order_mode}'` : '1 = 1'} and fooder_id = ? and creation_date BETWEEN ? and ? and payment_status = 1 and status IN (1, 2, 3) and is_cancelled = 0 
  ORDER BY id DESC`;
 
     // console.log("openTimeUnix",openTimeUnix);
@@ -3603,7 +3633,13 @@ exports.getCustomisedSalesReport = async (req, res) => {
           tempTax += ((((i.quantity) * withOutTaxPrice) + tempServicChargeRow - tempDiscountRow) * parseFloat(i.item_tax_percent)) / 100
         })
 
-
+        if (order.is_split === 1) {
+          const [[total_tax]] = await connection.query(
+            ` SELECT SUM(total_tax) AS total_tax FROM orders_bills WHERE order_id = ?;`,
+            [order.id]
+          );
+          tempTax = total_tax.total_tax
+        }
 
         var grandTotal = 0
 
@@ -4430,7 +4466,7 @@ exports.getOrderCopounReportDetails = async (req, res) => {
       // );
 
 
- 
+
 
 
 
@@ -4470,7 +4506,7 @@ exports.getOrderCopounReportDetails = async (req, res) => {
       );
 
 
-      
+
 
 
 
